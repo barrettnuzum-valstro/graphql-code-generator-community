@@ -1,18 +1,19 @@
-import autoBind from 'auto-bind';
-import { GraphQLSchema, Kind, OperationDefinitionNode, print } from 'graphql';
 import {
   ClientSideBasePluginConfig,
   ClientSideBaseVisitor,
   DocumentMode,
+  LoadedFragment,
   getConfigValue,
   indentMultiline,
-  LoadedFragment,
 } from '@graphql-codegen/visitor-plugin-common';
+import autoBind from 'auto-bind';
+import { GraphQLSchema, Kind, OperationDefinitionNode, print } from 'graphql';
 import { RawGraphQLRequestPluginConfig } from './config.js';
 
 export interface GraphQLRequestPluginConfig extends ClientSideBasePluginConfig {
   rawRequest: boolean;
   extensionsType: string;
+  sdkPrefix: string;
 }
 
 const additionalExportedTypes = `
@@ -32,14 +33,11 @@ export class GraphQLRequestVisitor extends ClientSideBaseVisitor<
     operationVariablesTypes: string;
   }[] = [];
 
-  constructor(
-    schema: GraphQLSchema,
-    fragments: LoadedFragment[],
-    rawConfig: RawGraphQLRequestPluginConfig,
-  ) {
+  constructor(schema: GraphQLSchema, fragments: LoadedFragment[], rawConfig: RawGraphQLRequestPluginConfig) {
     super(schema, fragments, rawConfig, {
       rawRequest: getConfigValue(rawConfig.rawRequest, false),
       extensionsType: getConfigValue(rawConfig.extensionsType, 'any'),
+      sdkPrefix: getConfigValue(rawConfig.sdkPrefix, ''),
     });
 
     autoBind(this);
@@ -48,17 +46,13 @@ export class GraphQLRequestVisitor extends ClientSideBaseVisitor<
     const fileExtension = this.config.emitLegacyCommonJSImports ? '' : '.js';
 
     this._additionalImports.push(`${typeImport} { GraphQLClient } from 'graphql-request';`);
-    this._additionalImports.push(
-      `${typeImport} * as Dom from 'graphql-request/dist/types.dom${fileExtension}';`,
-    );
+    this._additionalImports.push(`${typeImport} * as Dom from 'graphql-request/dist/types.dom${fileExtension}';`);
 
     if (this.config.rawRequest && this.config.documentMode !== DocumentMode.string) {
       this._additionalImports.push(`import { print } from 'graphql'`);
     }
 
-    this._externalImportPrefix = this.config.importOperationTypesFrom
-      ? `${this.config.importOperationTypesFrom}.`
-      : '';
+    this._externalImportPrefix = this.config.importOperationTypesFrom ? `${this.config.importOperationTypesFrom}.` : '';
   }
 
   public OperationDefinition(node: OperationDefinitionNode) {
@@ -68,7 +62,7 @@ export class GraphQLRequestVisitor extends ClientSideBaseVisitor<
       // eslint-disable-next-line no-console
       console.warn(
         `Anonymous GraphQL operation was ignored in "typescript-graphql-request", please make sure to name your operation: `,
-        print(node),
+        print(node)
       );
 
       return null;
@@ -82,7 +76,7 @@ export class GraphQLRequestVisitor extends ClientSideBaseVisitor<
     documentVariableName: string,
     operationType: string,
     operationResultType: string,
-    operationVariablesTypes: string,
+    operationVariablesTypes: string
   ): string {
     operationResultType = this._externalImportPrefix + operationResultType;
     operationVariablesTypes = this._externalImportPrefix + operationVariablesTypes;
@@ -113,9 +107,7 @@ export class GraphQLRequestVisitor extends ClientSideBaseVisitor<
         const optionalVariables =
           !o.node.variableDefinitions ||
           o.node.variableDefinitions.length === 0 ||
-          o.node.variableDefinitions.every(
-            v => v.type.kind !== Kind.NON_NULL_TYPE || v.defaultValue,
-          );
+          o.node.variableDefinitions.every(v => v.type.kind !== Kind.NON_NULL_TYPE || v.defaultValue);
         const docVarName = this.getDocumentNodeVariable(o.documentVariableName);
 
         if (this.config.rawRequest) {
@@ -126,9 +118,9 @@ export class GraphQLRequestVisitor extends ClientSideBaseVisitor<
           }
           return `${operationName}(variables${optionalVariables ? '?' : ''}: ${
             o.operationVariablesTypes
-          }, requestHeaders?: Dom.RequestInit["headers"]): Promise<{ data: ${
-            o.operationResultType
-          }; extensions?: ${this.config.extensionsType}; headers: Dom.Headers; status: number; }> {
+          }, requestHeaders?: Dom.RequestInit["headers"]): Promise<{ data: ${o.operationResultType}; extensions?: ${
+            this.config.extensionsType
+          }; headers: Dom.Headers; status: number; }> {
     return withWrapper((wrappedRequestHeaders) => client.rawRequest<${
       o.operationResultType
     }>(${docArg}, variables, {...requestHeaders, ...wrappedRequestHeaders}), '${operationName}', '${operationType}');
@@ -149,11 +141,13 @@ export class GraphQLRequestVisitor extends ClientSideBaseVisitor<
 
 const defaultWrapper: SdkFunctionWrapper = (action, _operationName, _operationType) => action();
 ${extraVariables.join('\n')}
-export function getSdk(client: GraphQLClient, withWrapper: SdkFunctionWrapper = defaultWrapper) {
+export function get${
+      this.config.sdkPrefix
+    }Sdk(client: GraphQLClient, withWrapper: SdkFunctionWrapper = defaultWrapper) {
   return {
 ${allPossibleActions.join(',\n')}
   };
 }
-export type Sdk = ReturnType<typeof getSdk>;`;
+export type ${this.config.sdkPrefix}Sdk = ReturnType<typeof get${this.config.sdkPrefix}Sdk>;`;
   }
 }

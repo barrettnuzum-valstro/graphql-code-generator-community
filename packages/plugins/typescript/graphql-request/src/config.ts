@@ -53,4 +53,28 @@ export interface RawGraphQLRequestPluginConfig extends RawClientSideBasePluginCo
    * ```
    */
   extensionsType?: string;
+
+  /**
+   * @description Allows you add a prefix to the exported SDK name
+   * @default empty string
+   *
+   * @exampleMarkdown
+   * ```ts filename="codegen.ts"
+   *  import type { CodegenConfig } from '@graphql-codegen/cli';
+   *
+   *  const config: CodegenConfig = {
+   *    // ...
+   *    generates: {
+   *      'path/to/file.ts': {
+   *        plugins: ['typescript', 'typescript-operations', 'typescript-graphql-request'],
+   *        config: {
+   *          rawRequest: 'Private'
+   *        },
+   *      },
+   *    },
+   *  };
+   *  export default config;
+   * ```
+   */
+  sdkPrefix?: string;
 }
